@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Config Manager - Firebase Auth</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="login-screen" class="screen">
+        <div class="login-container">
+            <h1>Config Manager</h1>
+            <p>Manage your configuration records securely</p>
+            <button id="google-login-btn" class="btn btn-primary">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4"/>
+                    <path d="M9.003 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.96v2.332C2.44 15.983 5.485 18 9.003 18z" fill="#34A853"/>
+                    <path d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71 0-.593.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+                    <path d="M9.003 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.464.891 11.426 0 9.003 0 5.485 0 2.44 2.017.96 4.958L3.967 7.29c.708-2.127 2.692-3.71 5.036-3.71z" fill="#EA4335"/>
+                </svg>
+                Sign in with Google
+            </button>
+        </div>
+    </div>
+
+    <!-- Dashboard Screen -->
+    <div id="dashboard-screen" class="screen hidden">
+        <nav class="navbar">
+            <div class="nav-content">
+                <h2>Config Manager</h2>
+                <div class="user-info">
+                    <span id="user-name"></span>
+                    <button id="logout-btn" class="btn btn-secondary">Logout</button>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container">
+            <div class="header-actions">
+                <h1>My Configuration Records</h1>
+                <button id="create-record-btn" class="btn btn-primary">+ Create New Record</button>
+            </div>
+
+            <div id="loading-state" class="empty-state">
+                <div class="loading-spinner"></div>
+                <h3>Loading records...</h3>
+            </div>
+
+            <div id="records-list" class="records-grid">
+                <!-- Records will be loaded here -->
+            </div>
+
+            <div id="empty-state" class="empty-state hidden">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <h3>No records yet</h3>
+                <p>Create your first configuration record to get started</p>
+            </div>
+
+            <div id="error-state" class="empty-state hidden">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <h3>Failed to load records</h3>
+                <p id="error-message">Please check the console for details</p>
+                <button id="retry-load-btn" class="btn btn-primary">Retry</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Record Modal -->
+    <div id="record-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Create New Record</h2>
+                <button class="close-btn" id="close-modal">&times;</button>
+            </div>
+            
+            <form id="record-form">
+                <div class="form-group">
+                    <label>Record Name *</label>
+                    <input type="text" id="record-name" required placeholder="e.g., Production Config">
+                </div>
+
+                <div class="form-group">
+                    <label>Configuration JSON *</label>
+                    <textarea id="config-json" rows="8" required placeholder='{"url": "https://xxx.supabase.co", "anonKey": "eyJhbGc...", "projectId": "xxx"}' spellcheck="false"></textarea>
+                    <small>Enter valid JSON configuration (e.g., Supabase credentials)</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Access Control *</label>
+                    <select id="access-type" required>
+                        <option value="">Select access type...</option>
+                        <option value="no-pin">No PIN (Public)</option>
+                        <option value="fixed-pin-expiry">Fixed PIN with Expiration</option>
+                        <option value="fixed-pin-no-expiry">Fixed PIN without Expiration</option>
+                        <option value="otp-expiry">OTP with Expiration</option>
+                    </select>
+                </div>
+
+                <!-- PIN Fields -->
+                <div id="pin-fields" class="form-group hidden">
+                    <label>PIN Code *</label>
+                    <input type="text" id="pin-code" placeholder="Enter 6-digit PIN" maxlength="6" pattern="[0-9]{6}">
+                </div>
+
+                <!-- Expiration Fields -->
+                <div id="expiry-fields" class="form-group hidden">
+                    <label>Expiration Date *</label>
+                    <input type="datetime-local" id="expiry-date">
+                </div>
+
+                <!-- CAPTCHA -->
+                <div class="form-group">
+                    <label>CAPTCHA Verification *</label>
+                    <div class="captcha-container">
+                        <div id="captcha-display" class="captcha-display">
+                            <span id="captcha-text">LOADING</span>
+                            <button type="button" id="refresh-captcha" class="btn-icon">🔄</button>
+                        </div>
+                        <input type="text" id="captcha-input" placeholder="Enter CAPTCHA" required>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="submit-btn">Create Record</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="success-modal" class="modal hidden">
+        <div class="modal-content success-content">
+            <div class="success-icon">✓</div>
+            <h2>Record Created Successfully!</h2>
+            
+            <div class="uuid-display">
+                <label>Configuration UUID</label>
+                <div class="uuid-box">
+                    <code id="generated-uuid"></code>
+                    <button type="button" id="copy-uuid-btn" class="btn-icon" title="Copy UUID">📋</button>
+                </div>
+            </div>
+
+            <div id="pin-display" class="pin-display hidden">
+                <label>PIN Code</label>
+                <div class="pin-box">
+                    <code id="generated-pin"></code>
+                </div>
+            </div>
+
+            <div class="uuid-display">
+                <label>Configuration JSON</label>
+                <pre id="success-config" style="background: #f8f9fa; padding: 12px; border-radius: 6px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 12px; text-align: left; max-height: 200px; overflow-y: auto;"></pre>
+            </div>
+
+            <button class="btn btn-primary" id="close-success-btn">Done</button>
+        </div>
+    </div>
+
+    <div id="view-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Record Details</h2>
+                <button class="close-btn" id="close-view-modal">&times;</button>
+            </div>
+            
+            <div class="record-details">
+                <div class="detail-row">
+                    <label>Record Name</label>
+                    <div id="view-name"></div>
+                </div>
+
+                <div class="detail-row">
+                    <label>UUID</label>
+                    <div class="uuid-box">
+                        <code id="view-uuid"></code>
+                        <button type="button" id="copy-view-uuid-btn" class="btn-icon">📋</button>
+                    </div>
+                </div>
+
+                <div class="detail-row">
+                    <label>Access Type</label>
+                    <div id="view-access-type"></div>
+                </div>
+
+                <div class="detail-row" id="view-pin-row">
+                    <label>PIN</label>
+                    <div id="view-pin"></div>
+                </div>
+
+                <div class="detail-row" id="view-expiry-row">
+                    <label>Expires At</label>
+                    <div id="view-expiry"></div>
+                </div>
+
+                <div class="detail-row">
+                    <label>Configuration JSON</label>
+                    <pre id="view-config"></pre>
+                </div>
+
+                <div class="detail-row">
+                    <label>Created</label>
+                    <div id="view-created"></div>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button class="btn btn-secondary" id="close-view-btn">Close</button>
+                <button class="btn btn-danger" id="delete-record-btn">Delete</button>
+                <button class="btn btn-primary" id="edit-record-btn">Edit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <!-- App Scripts -->
+    <script src="firebase-config.js"></script>
+    <script src="captcha.js"></script>
+    <script src="auth.js"></script>
+    <script src="records.js"></script>
+
+</body>
+</html>
