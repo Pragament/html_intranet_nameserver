@@ -191,8 +191,14 @@
                 </div>
 
                 <div class="detail-row" id="view-pin-row">
-                    <label>PIN</label>
-                    <div id="view-pin"></div>
+                    <label id="view-pin-label">PIN</label>
+                    <div class="pin-box" style="display: flex; align-items: center; gap: 10px;">
+                        <div id="view-pin" style="font-size: 1.1em; font-family: 'Courier New', monospace; font-weight: bold; padding: 10px 12px; background: white; border: 1px solid var(--border); border-radius: 6px; margin: 0; flex: 1; display: flex; justify-content: space-between; align-items: center;">
+                            <span id="view-pin-value"></span>
+                            <span id="view-pin-status" style="color: var(--danger); font-size: 12px; background: #ffebee; padding: 2px 6px; border-radius: 4px; display: none;">EXPIRED</span>
+                        </div>
+                        <button type="button" id="regenerate-otp-btn" class="btn btn-primary hidden" style="padding: 10px 16px; font-size: 13px; font-weight: 600; line-height: 1;">Regenerate OTP</button>
+                    </div>
                 </div>
 
                 <div class="detail-row" id="view-expiry-row">

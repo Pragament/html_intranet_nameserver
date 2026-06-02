@@ -5,6 +5,7 @@ class RecordsManager {
         this.records = [];
         this.currentRecord = null;
         this.editMode = false;
+        this.expiryTimer = null;
         this.init();
     }
 
@@ -59,15 +60,20 @@ class RecordsManager {
         // View modal
         document.getElementById('close-view-modal')?.addEventListener('click', () => {
             document.getElementById('view-modal').classList.add('hidden');
+            if (this.expiryTimer) clearInterval(this.expiryTimer);
         });
         document.getElementById('close-view-btn')?.addEventListener('click', () => {
             document.getElementById('view-modal').classList.add('hidden');
+            if (this.expiryTimer) clearInterval(this.expiryTimer);
         });
         document.getElementById('delete-record-btn')?.addEventListener('click', () => {
             this.deleteRecord();
         });
         document.getElementById('edit-record-btn')?.addEventListener('click', () => {
             this.editRecord();
+        });
+        document.getElementById('regenerate-otp-btn')?.addEventListener('click', () => {
+            this.regenerateOTP();
         });
     }
 
@@ -451,11 +457,28 @@ class RecordsManager {
         const createdAt = record.createdAt ? new Date(record.createdAt.seconds * 1000).toLocaleString() : 'N/A';
         document.getElementById('view-created').textContent = createdAt;
 
-        // Show/hide PIN
+        // Show/hide PIN or OTP
         const pinRow = document.getElementById('view-pin-row');
+        const pinLabel = document.getElementById('view-pin-label');
+        const pinValue = document.getElementById('view-pin-value');
+        const regenBtn = document.getElementById('regenerate-otp-btn');
+        
         if (record.pin) {
             pinRow.classList.remove('hidden');
-            document.getElementById('view-pin').textContent = record.pin;
+            if (pinLabel) pinLabel.textContent = 'PIN';
+            if (pinValue) pinValue.textContent = record.pin;
+            if (regenBtn) regenBtn.classList.add('hidden');
+        } else if (record.otp) {
+            pinRow.classList.remove('hidden');
+            if (pinLabel) pinLabel.textContent = 'OTP';
+            if (pinValue) pinValue.textContent = record.otp;
+            if (regenBtn) {
+                if (record.accessType === 'otp-expiry') {
+                    regenBtn.classList.remove('hidden');
+                } else {
+                    regenBtn.classList.add('hidden');
+                }
+            }
         } else {
             pinRow.classList.add('hidden');
         }
@@ -471,6 +494,32 @@ class RecordsManager {
         }
 
         this.currentRecord = record;
+
+        // Clear existing timer and setup live expiration check
+        if (this.expiryTimer) {
+            clearInterval(this.expiryTimer);
+            this.expiryTimer = null;
+        }
+
+        const statusEl = document.getElementById('view-pin-status');
+        if (statusEl) statusEl.style.display = 'none';
+
+        if (record.expiresAt) {
+            const checkExpiry = () => {
+                if (!this.currentRecord || !this.currentRecord.expiresAt) return;
+                const now = new Date();
+                const expiryDate = new Date(this.currentRecord.expiresAt.seconds * 1000);
+                if (now >= expiryDate) {
+                    if (statusEl) statusEl.style.display = 'block';
+                } else {
+                    if (statusEl) statusEl.style.display = 'none';
+                }
+            };
+            
+            checkExpiry(); // Check immediately
+            this.expiryTimer = setInterval(checkExpiry, 1000); // Update every second
+        }
+
         modal.classList.remove('hidden');
     }
 
@@ -494,6 +543,58 @@ class RecordsManager {
         } catch (error) {
             console.error('Error deleting record:', error);
             alert('Failed to delete record: ' + error.message);
+        }
+    }
+
+    // Regenerate OTP
+    async regenerateOTP() {
+        if (!this.currentRecord || this.currentRecord.accessType !== 'otp-expiry') return;
+
+        if (!confirm('Are you sure you want to regenerate the OTP? The new OTP will expire in 5 minutes.')) {
+            return;
+        }
+
+        const newOTP = this.generateOTP();
+        const now = new Date();
+        now.setMinutes(now.getMinutes() + 5);
+        const newExpiry = firebase.firestore.Timestamp.fromDate(now);
+
+        try {
+            const regenBtn = document.getElementById('regenerate-otp-btn');
+            const originalText = regenBtn.textContent;
+            regenBtn.textContent = 'Updating...';
+            regenBtn.disabled = true;
+
+            await db.collection('configs').doc(this.currentRecord.id).update({
+                otp: newOTP,
+                otpUsed: false,
+                expiresAt: newExpiry,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            // Update current record in memory
+            this.currentRecord.otp = newOTP;
+            this.currentRecord.otpUsed = false;
+            this.currentRecord.expiresAt = newExpiry;
+
+            // Update UI
+            document.getElementById('view-pin-value').textContent = newOTP;
+            document.getElementById('view-expiry').textContent = new Date(newExpiry.seconds * 1000).toLocaleString();
+            
+            // Reload list in background so it's updated if modal is closed
+            this.loadRecords();
+
+            alert('OTP successfully regenerated with a 5-minute expiration!');
+            regenBtn.textContent = originalText;
+            regenBtn.disabled = false;
+        } catch (error) {
+            console.error('Error regenerating OTP:', error);
+            alert('Failed to regenerate OTP: ' + error.message);
+            const regenBtn = document.getElementById('regenerate-otp-btn');
+            if (regenBtn) {
+                regenBtn.disabled = false;
+                regenBtn.textContent = 'Regenerate OTP';
+            }
         }
     }
 
